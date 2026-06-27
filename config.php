@@ -50,7 +50,8 @@ function current_user(): ?array
     if (empty($_SESSION['user_id'])) {
         return null;
     }
-    $stmt = db()->prepare('SELECT id, username, email, created_at FROM users WHERE id = ?');
+    $stmt = db()->prepare('SELECT id, username, email, created_at, last_seen FROM users WHERE id = ?');
+    db()->prepare('UPDATE users SET last_seen = NOW() WHERE id = ?')->execute([$_SESSION['user_id']]);
     $stmt->execute([$_SESSION['user_id']]);
     $user = $stmt->fetch();
     return $user ?: null;
