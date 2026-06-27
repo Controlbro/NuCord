@@ -19,88 +19,67 @@ if (SETUP_KEY !== '' && ($_GET['key'] ?? '') !== SETUP_KEY) {
 $messages = [];
 $ran = false;
 
+function column_exists(PDO $pdo, string $table, string $column): bool
+{
+    $check = $pdo->prepare('SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
+    $check->execute([$table, $column]);
+    return (bool)$check->fetchColumn();
+}
+
+function index_exists(PDO $pdo, string $table, string $index): bool
+{
+    $check = $pdo->prepare('SELECT COUNT(*) FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?');
+    $check->execute([$table, $index]);
+    return (bool)$check->fetchColumn();
+}
+
+function add_column(PDO $pdo, string $table, string $column, string $definition): void
+{
+    if (!column_exists($pdo, $table, $column)) {
+        $pdo->exec("ALTER TABLE `$table` ADD COLUMN $definition");
+    }
+}
+
+function add_index(PDO $pdo, string $table, string $index, string $definition): void
+{
+    if (!index_exists($pdo, $table, $index)) {
+        $pdo->exec("ALTER TABLE `$table` ADD $definition");
+    }
+}
+
 function run_schema(PDO $pdo): void
 {
     $sql = [
-        "CREATE TABLE IF NOT EXISTS users (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(32) NOT NULL UNIQUE,
-            email VARCHAR(190) NOT NULL UNIQUE,
-            password_hash VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_seen TIMESTAMP NULL DEFAULT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS friends (
-            user_id INT UNSIGNED NOT NULL,
-            friend_id INT UNSIGNED NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, friend_id),
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS friend_requests (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            sender_id INT UNSIGNED NOT NULL,
-            receiver_id INT UNSIGNED NOT NULL,
-            status ENUM('pending','accepted','declined') NOT NULL DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_pending_pair (sender_id, receiver_id, status),
-            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS conversations (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            title VARCHAR(120) DEFAULT NULL,
-            is_direct TINYINT(1) NOT NULL DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS conversation_members (
-            conversation_id INT UNSIGNED NOT NULL,
-            user_id INT UNSIGNED NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (conversation_id, user_id),
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS messages (
-            id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            conversation_id INT UNSIGNED NOT NULL,
-            user_id INT UNSIGNED NOT NULL,
-            body TEXT NOT NULL,
-            media_path VARCHAR(255) DEFAULT NULL,
-            media_type ENUM('image','video') DEFAULT NULL,
-            media_name VARCHAR(190) DEFAULT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_conversation_id (conversation_id, id),
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
-        "CREATE TABLE IF NOT EXISTS typing_status (
-            conversation_id INT UNSIGNED NOT NULL,
-            user_id INT UNSIGNED NOT NULL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (conversation_id, user_id),
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS users (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, username VARCHAR(32) NOT NULL UNIQUE, email VARCHAR(190) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, avatar VARCHAR(255) DEFAULT NULL, status ENUM('online','dnd') NOT NULL DEFAULT 'online', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_seen TIMESTAMP NULL DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS friends (user_id INT UNSIGNED NOT NULL, friend_id INT UNSIGNED NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, friend_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS friend_requests (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, sender_id INT UNSIGNED NOT NULL, receiver_id INT UNSIGNED NOT NULL, status ENUM('pending','accepted','declined') NOT NULL DEFAULT 'pending', seen_at TIMESTAMP NULL DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY unique_pending_pair (sender_id, receiver_id, status), FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS conversations (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, title VARCHAR(120) DEFAULT NULL, is_direct TINYINT(1) NOT NULL DEFAULT 1, type ENUM('dm','group') NOT NULL DEFAULT 'dm', name VARCHAR(120) DEFAULT NULL, avatar VARCHAR(255) DEFAULT NULL, owner_id INT UNSIGNED DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS conversation_members (conversation_id INT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, muted TINYINT(1) NOT NULL DEFAULT 0, last_read_message_id INT UNSIGNED NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, user_id), FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS messages (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, conversation_id INT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL, body TEXT NOT NULL, image_path VARCHAR(255) DEFAULT NULL, media_path VARCHAR(255) DEFAULT NULL, media_type ENUM('image','video') DEFAULT NULL, media_name VARCHAR(190) DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_conversation_id (conversation_id, id), FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS typing_status (conversation_id INT UNSIGNED NOT NULL, user_id INT UNSIGNED NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (conversation_id, user_id), FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS blocked_users (blocker_id INT UNSIGNED NOT NULL, blocked_id INT UNSIGNED NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (blocker_id, blocked_id), FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
     ];
-    foreach ($sql as $statement) {
-        $pdo->exec($statement);
-    }
-    $columns = [
-        ['users', 'last_seen', "ALTER TABLE users ADD COLUMN last_seen TIMESTAMP NULL DEFAULT NULL"],
-        ['messages', 'media_path', "ALTER TABLE messages ADD COLUMN media_path VARCHAR(255) DEFAULT NULL"],
-        ['messages', 'media_type', "ALTER TABLE messages ADD COLUMN media_type ENUM('image','video') DEFAULT NULL"],
-        ['messages', 'media_name', "ALTER TABLE messages ADD COLUMN media_name VARCHAR(190) DEFAULT NULL"],
-    ];
-    foreach ($columns as [$table, $column, $alter]) {
-        $check = $pdo->prepare('SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
-        $check->execute([$table, $column]);
-        if (!$check->fetchColumn()) {
-            $pdo->exec($alter);
-        }
-    }
+    foreach ($sql as $statement) { $pdo->exec($statement); }
+    add_column($pdo, 'users', 'avatar', "avatar VARCHAR(255) DEFAULT NULL");
+    add_column($pdo, 'users', 'status', "status ENUM('online','dnd') NOT NULL DEFAULT 'online'");
+    add_column($pdo, 'users', 'last_seen', "last_seen TIMESTAMP NULL DEFAULT NULL");
+    add_column($pdo, 'friend_requests', 'seen_at', "seen_at TIMESTAMP NULL DEFAULT NULL");
+    add_column($pdo, 'conversations', 'type', "type ENUM('dm','group') NOT NULL DEFAULT 'dm'");
+    add_column($pdo, 'conversations', 'name', "name VARCHAR(120) DEFAULT NULL");
+    add_column($pdo, 'conversations', 'avatar', "avatar VARCHAR(255) DEFAULT NULL");
+    add_column($pdo, 'conversations', 'owner_id', "owner_id INT UNSIGNED DEFAULT NULL");
+    add_column($pdo, 'conversation_members', 'joined_at', "joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+    add_column($pdo, 'conversation_members', 'muted', "muted TINYINT(1) NOT NULL DEFAULT 0");
+    add_column($pdo, 'conversation_members', 'last_read_message_id', "last_read_message_id INT UNSIGNED NOT NULL DEFAULT 0");
+    add_column($pdo, 'messages', 'image_path', "image_path VARCHAR(255) DEFAULT NULL");
+    add_column($pdo, 'messages', 'media_path', "media_path VARCHAR(255) DEFAULT NULL");
+    add_column($pdo, 'messages', 'media_type', "media_type ENUM('image','video') DEFAULT NULL");
+    add_column($pdo, 'messages', 'media_name', "media_name VARCHAR(190) DEFAULT NULL");
+    $pdo->exec("UPDATE conversations SET type = CASE WHEN is_direct=1 THEN 'dm' ELSE 'group' END WHERE type IS NULL OR type='' ");
+    $pdo->exec("UPDATE conversation_members SET joined_at = created_at WHERE joined_at IS NULL");
+    $pdo->exec("UPDATE messages SET image_path = media_path WHERE image_path IS NULL AND media_type = 'image' AND media_path IS NOT NULL");
+    add_index($pdo, 'messages', 'idx_messages_created', 'INDEX idx_messages_created (created_at)');
+    add_index($pdo, 'friend_requests', 'idx_friend_requests_receiver', 'INDEX idx_friend_requests_receiver (receiver_id, status, id)');
 }
 
 function seed_demo(PDO $pdo): void
