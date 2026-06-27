@@ -50,7 +50,7 @@ function add_index(PDO $pdo, string $table, string $index, string $definition): 
 function run_schema(PDO $pdo): void
 {
     $sql = [
-        "CREATE TABLE IF NOT EXISTS users (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, username VARCHAR(32) NOT NULL UNIQUE, email VARCHAR(190) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, avatar VARCHAR(255) DEFAULT NULL, status ENUM('online','dnd') NOT NULL DEFAULT 'online', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_seen TIMESTAMP NULL DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+        "CREATE TABLE IF NOT EXISTS users (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, username VARCHAR(32) NOT NULL UNIQUE, email VARCHAR(190) NOT NULL UNIQUE, password_hash VARCHAR(255) NOT NULL, avatar VARCHAR(255) DEFAULT NULL, status ENUM('online','dnd','offline') NOT NULL DEFAULT 'online', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_seen TIMESTAMP NULL DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS friends (user_id INT UNSIGNED NOT NULL, friend_id INT UNSIGNED NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, friend_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS friend_requests (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, sender_id INT UNSIGNED NOT NULL, receiver_id INT UNSIGNED NOT NULL, status ENUM('pending','accepted','declined') NOT NULL DEFAULT 'pending', seen_at TIMESTAMP NULL DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY unique_pending_pair (sender_id, receiver_id, status), FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS conversations (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, title VARCHAR(120) DEFAULT NULL, is_direct TINYINT(1) NOT NULL DEFAULT 1, type ENUM('dm','group') NOT NULL DEFAULT 'dm', name VARCHAR(120) DEFAULT NULL, avatar VARCHAR(255) DEFAULT NULL, owner_id INT UNSIGNED DEFAULT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
@@ -61,7 +61,8 @@ function run_schema(PDO $pdo): void
     ];
     foreach ($sql as $statement) { $pdo->exec($statement); }
     add_column($pdo, 'users', 'avatar', "avatar VARCHAR(255) DEFAULT NULL");
-    add_column($pdo, 'users', 'status', "status ENUM('online','dnd') NOT NULL DEFAULT 'online'");
+    add_column($pdo, 'users', 'status', "status ENUM('online','dnd','offline') NOT NULL DEFAULT 'online'");
+    try { $pdo->exec("ALTER TABLE users MODIFY status ENUM('online','dnd','offline') NOT NULL DEFAULT 'online'"); } catch (Throwable $e) {}
     add_column($pdo, 'users', 'last_seen', "last_seen TIMESTAMP NULL DEFAULT NULL");
     add_column($pdo, 'friend_requests', 'seen_at', "seen_at TIMESTAMP NULL DEFAULT NULL");
     add_column($pdo, 'conversations', 'type', "type ENUM('dm','group') NOT NULL DEFAULT 'dm'");
