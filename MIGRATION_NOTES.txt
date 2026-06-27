@@ -1,10 +1,18 @@
 NuCord migration notes
 
-1. Run setup.php once after uploading these files. It uses CREATE TABLE IF NOT EXISTS and checks for each new column before ALTER TABLE, so it updates the schema without deleting existing users, friends, conversations, or messages.
-2. Make sure these folders exist and are writable by PHP on shared hosting / DirectAdmin:
-   - uploads/avatars/
-   - uploads/messages/
-3. Place the notification sound at:
-   - sounds/notify.mp3
-4. Demo seed data is optional from setup.php. Do not seed demo data on a production site unless you want demo accounts.
-5. After setup succeeds, delete setup.php or set SETUP_KEY in config.php and only access setup.php with the secret key.
+1. Upload the files, edit config.php with the existing MySQL credentials, then run setup.php once after upload.
+2. setup.php uses CREATE TABLE IF NOT EXISTS and additive ALTER TABLE checks. It does not drop tables or wipe users, messages, friends, groups, or uploads.
+3. Make these paths writable/readable by the web server as needed:
+   - /uploads/avatars/
+   - /uploads/messages/
+   - /sounds/
+4. Keep the notification sound at /sounds/notify.mp3.
+5. Optional site password gate:
+   - Set SITE_PASSWORD_ENABLED to true in config.php.
+   - Put a password_hash() value in SITE_PASSWORD_HASH.
+   - Users will unlock site-password.php before login/register.
+6. Optional Google reCAPTCHA:
+   - Set RECAPTCHA_ENABLED to true in config.php.
+   - Put your Google v2 checkbox site key in RECAPTCHA_SITE_KEY.
+   - Put your Google secret key in RECAPTCHA_SECRET_KEY.
+7. The app now stores timestamps normally in MySQL and formats message times in the visitor's browser timezone.

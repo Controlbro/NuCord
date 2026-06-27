@@ -1,0 +1,33 @@
+NuCord testing checklist
+
+[ ] Run setup.php once after upload.
+[ ] Register with reCAPTCHA disabled.
+[ ] Login with reCAPTCHA disabled.
+[ ] Enable site password and confirm site-password.php gates login/register.
+[ ] Enable reCAPTCHA keys and confirm login/register require valid captcha.
+[ ] Upload avatar.
+[ ] Toggle Online/DND.
+[ ] Send and receive DM messages.
+[ ] Send and receive group messages.
+[ ] Confirm message times show local 12-hour time.
+[ ] Confirm typing indicator appears and clears.
+[ ] Select image, preview it, remove it, and verify input clears.
+[ ] Send image and verify preview clears after success.
+[ ] Force a send failure and verify preview remains for retry.
+[ ] Open emoji picker and insert emoji into composer.
+[ ] Send, accept, and deny friend requests.
+[ ] Unfriend a user.
+[ ] Create group.
+[ ] Mute group and verify unread remains but sound is muted.
+[ ] Confirm unread badges clear when opening conversations.
+[ ] Confirm notification sound plays for new DM/group/request after first interaction.
+[ ] Confirm no sound plays for own messages, current user DND, or muted groups.
+[ ] Owner can kick members.
+[ ] Owner can promote members.
+[ ] Owner can rename group and change group picture.
+[ ] Member can leave group.
+[ ] Ownership transfers when owner leaves.
+[ ] Mobile layout has no horizontal overflow and message input stays usable.
+[ ] Page itself does not scroll; only messages, lists, and member pane scroll.
+[ ] Conversation names are not duplicated.
+[ ] No random blank circle appears above the message box.
