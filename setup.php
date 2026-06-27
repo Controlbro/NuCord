@@ -27,7 +27,8 @@ function run_schema(PDO $pdo): void
             username VARCHAR(32) NOT NULL UNIQUE,
             email VARCHAR(190) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen TIMESTAMP NULL DEFAULT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
         "CREATE TABLE IF NOT EXISTS friends (
             user_id INT UNSIGNED NOT NULL,
@@ -67,6 +68,9 @@ function run_schema(PDO $pdo): void
             conversation_id INT UNSIGNED NOT NULL,
             user_id INT UNSIGNED NOT NULL,
             body TEXT NOT NULL,
+            media_path VARCHAR(255) DEFAULT NULL,
+            media_type ENUM('image','video') DEFAULT NULL,
+            media_name VARCHAR(190) DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_conversation_id (conversation_id, id),
             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
@@ -83,6 +87,19 @@ function run_schema(PDO $pdo): void
     ];
     foreach ($sql as $statement) {
         $pdo->exec($statement);
+    }
+    $columns = [
+        ['users', 'last_seen', "ALTER TABLE users ADD COLUMN last_seen TIMESTAMP NULL DEFAULT NULL"],
+        ['messages', 'media_path', "ALTER TABLE messages ADD COLUMN media_path VARCHAR(255) DEFAULT NULL"],
+        ['messages', 'media_type', "ALTER TABLE messages ADD COLUMN media_type ENUM('image','video') DEFAULT NULL"],
+        ['messages', 'media_name', "ALTER TABLE messages ADD COLUMN media_name VARCHAR(190) DEFAULT NULL"],
+    ];
+    foreach ($columns as [$table, $column, $alter]) {
+        $check = $pdo->prepare('SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?');
+        $check->execute([$table, $column]);
+        if (!$check->fetchColumn()) {
+            $pdo->exec($alter);
+        }
     }
 }
 
