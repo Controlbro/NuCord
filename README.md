@@ -1,0 +1,2 @@
+# NuCord
+Discord Alternative
