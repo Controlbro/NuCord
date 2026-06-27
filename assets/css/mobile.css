@@ -1,0 +1,1 @@
+@media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{display:flex;max-height:42vh}.member-pane{display:none!important}.composer{padding-bottom:max(12px,env(safe-area-inset-bottom))}}
