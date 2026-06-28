@@ -34,6 +34,7 @@ SELECT
     COALESCE(mm.last_message_id, 0) AS last_message_id,
     cm.last_read_message_id,
     COALESCE(um.unread, 0) AS unread,
+    COALESCE(gs.member_count, 0) AS member_count,
     CASE
         WHEN c.type='dm' THEN COALESCE(ou.status, 'offline')
         WHEN COALESCE(gs.online_count, 0) > 0 THEN 'online'
