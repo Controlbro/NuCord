@@ -3,6 +3,7 @@ require __DIR__ . '/../config.php';
 $user=api_user(); $pdo=db(); $action=$_REQUEST['action'] ?? 'list';
 if($_SERVER['REQUEST_METHOD']==='POST' && !verify_csrf($_POST['csrf'] ?? null)) json_response(['ok'=>false,'error'=>'Bad CSRF token.'],403);
 if($action==='mark_read'){ $cid=(int)($_POST['conversation_id']??0); $max=$pdo->prepare('SELECT COALESCE(MAX(id),0) FROM messages WHERE conversation_id=?'); $max->execute([$cid]); $pdo->prepare('UPDATE conversation_members SET last_read_message_id=? WHERE conversation_id=? AND user_id=?')->execute([(int)$max->fetchColumn(),$cid,$user['id']]); json_response(['ok'=>true]); }
+if($action==='hide'){ $cid=(int)($_POST['conversation_id']??0); $member=$pdo->prepare('SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?'); $member->execute([$cid,$user['id']]); if(!$member->fetchColumn()) json_response(['ok'=>false,'error'=>'Conversation not found.'],404); $max=$pdo->prepare('SELECT COALESCE(MAX(id),0) FROM messages WHERE conversation_id=?'); $max->execute([$cid]); $last=(int)$max->fetchColumn(); $pdo->prepare('INSERT INTO hidden_conversations (user_id,conversation_id,hidden_after_message_id,hidden_at) VALUES (?,?,?,NOW()) ON DUPLICATE KEY UPDATE hidden_after_message_id=VALUES(hidden_after_message_id), hidden_at=NOW()')->execute([$user['id'],$cid,$last]); json_response(['ok'=>true]); }
 if($action==='mute'){ $cid=(int)($_POST['conversation_id']??0); $muted=(int)($_POST['muted']??1); $pdo->prepare('UPDATE conversation_members cm JOIN conversations c ON c.id=cm.conversation_id SET cm.muted=? WHERE cm.conversation_id=? AND cm.user_id=? AND c.type="group"')->execute([$muted,$cid,$user['id']]); json_response(['ok'=>true]); }
 if($action==='create_group'){ $name=mb_substr(trim($_POST['name']??'New Group'),0,120) ?: 'New Group'; $ids=array_slice(array_map('intval',$_POST['members']??[]),0,20); $pdo->beginTransaction(); $pdo->prepare("INSERT INTO conversations (is_direct,type,name,owner_id) VALUES (0,'group',?,?)")->execute([$name,$user['id']]); $cid=(int)$pdo->lastInsertId(); $ins=$pdo->prepare('INSERT IGNORE INTO conversation_members (conversation_id,user_id) VALUES (?,?)'); $ins->execute([$cid,$user['id']]); $ok=$pdo->prepare('SELECT 1 FROM friends WHERE user_id=? AND friend_id=?'); foreach($ids as $id){$ok->execute([$user['id'],$id]); if($ok->fetchColumn()) $ins->execute([$cid,$id]);} $pdo->commit(); json_response(['ok'=>true,'conversation_id'=>$cid]); }
 function is_owner(PDO $pdo,int $cid,int $uid): bool { $s=$pdo->prepare('SELECT 1 FROM conversations WHERE id=? AND owner_id=? AND type="group"'); $s->execute([$cid,$uid]); return (bool)$s->fetchColumn(); }
@@ -34,6 +35,7 @@ SELECT
     COALESCE(mm.last_message_id, 0) AS last_message_id,
     cm.last_read_message_id,
     COALESCE(um.unread, 0) AS unread,
+    COALESCE(gs.member_count, 0) AS member_count,
     CASE
         WHEN c.type='dm' THEN COALESCE(ou.status, 'offline')
         WHEN COALESCE(gs.online_count, 0) > 0 THEN 'online'
@@ -52,6 +54,8 @@ LEFT JOIN (
            SUM(CASE WHEN u2.status='dnd' THEN 1 ELSE 0 END) AS dnd_count
     FROM conversation_members cm2 JOIN users u2 ON u2.id=cm2.user_id GROUP BY cm2.conversation_id
 ) gs ON gs.conversation_id = c.id
+LEFT JOIN hidden_conversations hc ON hc.conversation_id = c.id AND hc.user_id = cm.user_id AND COALESCE(mm.last_message_id, 0) <= hc.hidden_after_message_id
+WHERE hc.conversation_id IS NULL
 GROUP BY c.id
 ORDER BY GREATEST(COALESCE(mm.last_message_id,0), c.id) DESC
 ");
