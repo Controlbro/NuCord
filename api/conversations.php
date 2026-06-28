@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/../config.php';
-$user=api_user(); $pdo=db(); $action=$_REQUEST['action'] ?? 'list';
+$user=api_user(); $pdo=db(); ensure_hidden_conversations_table($pdo); $action=$_REQUEST['action'] ?? 'list';
 if($_SERVER['REQUEST_METHOD']==='POST' && !verify_csrf($_POST['csrf'] ?? null)) json_response(['ok'=>false,'error'=>'Bad CSRF token.'],403);
 if($action==='mark_read'){ $cid=(int)($_POST['conversation_id']??0); $max=$pdo->prepare('SELECT COALESCE(MAX(id),0) FROM messages WHERE conversation_id=?'); $max->execute([$cid]); $pdo->prepare('UPDATE conversation_members SET last_read_message_id=? WHERE conversation_id=? AND user_id=?')->execute([(int)$max->fetchColumn(),$cid,$user['id']]); json_response(['ok'=>true]); }
 if($action==='hide'){ $cid=(int)($_POST['conversation_id']??0); $member=$pdo->prepare('SELECT 1 FROM conversation_members WHERE conversation_id=? AND user_id=?'); $member->execute([$cid,$user['id']]); if(!$member->fetchColumn()) json_response(['ok'=>false,'error'=>'Conversation not found.'],404); $max=$pdo->prepare('SELECT COALESCE(MAX(id),0) FROM messages WHERE conversation_id=?'); $max->execute([$cid]); $last=(int)$max->fetchColumn(); $pdo->prepare('INSERT INTO hidden_conversations (user_id,conversation_id,hidden_after_message_id,hidden_at) VALUES (?,?,?,NOW()) ON DUPLICATE KEY UPDATE hidden_after_message_id=VALUES(hidden_after_message_id), hidden_at=NOW()')->execute([$user['id'],$cid,$last]); json_response(['ok'=>true]); }
