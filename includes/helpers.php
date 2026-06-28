@@ -33,6 +33,17 @@ function json_response(array $payload, int $status = 200): void
     exit;
 }
 
+
+function ensure_hidden_conversations_table(PDO $pdo): void
+{
+    static $ready = false;
+    if ($ready) {
+        return;
+    }
+    $pdo->exec("CREATE TABLE IF NOT EXISTS hidden_conversations (user_id INT UNSIGNED NOT NULL, conversation_id INT UNSIGNED NOT NULL, hidden_after_message_id INT UNSIGNED NOT NULL DEFAULT 0, hidden_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, conversation_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+    $ready = true;
+}
+
 function ensure_upload_dir(string $relative): string
 {
     $dir = dirname(__DIR__) . '/' . $relative;
